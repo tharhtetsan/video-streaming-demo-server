@@ -18,7 +18,7 @@ from app.auth import (
     create_stream_token, verify_stream_token, get_current_user,
 )
 from app.storage import upload_fileobj, public_hls_url
-
+from celery import Celery
 
 
 
@@ -117,7 +117,7 @@ async def upload_video(
     await db.commit()
 
     # Dispatch Celery job
-    from celery import Celery
+    
     celery_app = Celery(broker=settings.REDIS_URL)
 
     # Then in upload_video():

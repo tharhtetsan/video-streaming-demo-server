@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 celery = Celery(
     "worker",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
+    broker=os.environ["REDIS_URL"],
+    backend=os.environ["REDIS_URL"],
 )
 
 celery.conf.update(

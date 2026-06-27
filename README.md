@@ -158,30 +158,6 @@ Nginx acts as an edge cache for HLS delivery:
 
 ---
 
-## Project Structure
-
-```
-.
-├── docker-compose.yml
-├── Dockerfile.api          # FastAPI + Gunicorn
-├── Dockerfile.worker       # Celery + FFmpeg
-├── requirements.txt
-├── app/
-│   ├── main.py             # FastAPI routes
-│   ├── config.py           # Pydantic settings
-│   ├── database.py         # SQLAlchemy models (Video, User)
-│   ├── auth.py             # JWT + bcrypt
-│   └── storage.py          # MinIO/S3 helpers
-├── worker/
-│   └── tasks.py            # Celery tasks (FFmpeg conversion)
-├── templates/
-│   ├── dashboard.html      # Upload UI + video library
-│   └── video_player.html   # hls.js player with quality selector
-└── nginx/
-    └── nginx.conf          # Proxy + HLS cache config
-```
-
----
 
 ## Moving to Real Production
 
@@ -193,3 +169,33 @@ Nginx acts as an edge cache for HLS delivery:
 | Celery workers | 1 container | Auto-scaling worker pool (ECS/K8s) |
 | PostgreSQL | Docker volume | RDS / Cloud SQL |
 | Redis | Docker | ElastiCache / Upstash |
+
+
+## Video Quality work
+```bash
+output/
+├── master.m3u8          ← index of all qualities
+├── stream_0/
+│   ├── playlist.m3u8    ← 480p index
+│   ├── seg000.ts
+│   └── seg001.ts ...
+├── stream_1/
+│   ├── playlist.m3u8    ← 720p index
+│   └── seg000.ts ...
+└── stream_2/
+    ├── playlist.m3u8    ← 1080p index
+    └── seg000.ts ...
+```
+switches quality automatically:
+```bash
+Buffer > 30s + fast connection  → switch UP   to higher quality
+Buffer < 10s + slow connection  → switch DOWN to lower quality
+```
+
+```bash
+FFmpeg          →  3 quality streams in MinIO
+master.m3u8     →  hls.js discovers all variants
+ABR algorithm   →  auto-picks best quality per network
+hls.currentLevel →  manual override from dropdown
+Segment boundary →  seamless quality switch mid-playback
+```
