@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HLS Streaming Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 { font-size: 1.2rem; color: #7c6aff; font-weight: 700; }
+
+    #auth-status { font-size: 0.85rem; color: #94a3b8; }
+    #auth-status span { color: #7c6aff; font-weight: 600; }
+
+    main { max-width: 960px; margin: 2rem auto; padding: 0 1.5rem; }
+
+    /* ── Auth panel ── */
+    #auth-panel {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    #auth-panel h2 { margin-bottom: 1rem; font-size: 1rem; color: #94a3b8; }
+
+    .input-row { display: flex; gap: .75rem; flex-wrap: wrap; margin-bottom: .75rem; }
+
+    input[type="text"], input[type="password"] {
+      flex: 1;
+      min-width: 160px;
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      color: #e2e8f0;
+      padding: .6rem 1rem;
+      border-radius: 8px;
+      font-size: .9rem;
+      outline: none;
+    }
+
+    input:focus { border-color: #7c6aff; }
+
+    .btn {
+      padding: .6rem 1.4rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: .9rem;
+      font-weight: 600;
+      transition: opacity .15s;
+    }
+
+    .btn:hover { opacity: .85; }
+    .btn-primary   { background: #7c6aff; color: #fff; }
+    .btn-secondary { background: #2d3148; color: #e2e8f0; }
+    .btn-danger    { background: #ef4444; color: #fff; }
+    .btn-sm        { padding: .35rem .9rem; font-size: .8rem; }
+
+    /* ── Upload panel ── */
+    #upload-panel {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      display: none;
+    }
+
+    #upload-panel h2 { margin-bottom: 1.25rem; font-size: 1rem; color: #94a3b8; }
+
+    #drop-zone {
+      border: 2px dashed #2d3148;
+      border-radius: 10px;
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      margin-bottom: 1rem;
+    }
+
+    #drop-zone.drag-over { border-color: #7c6aff; background: #1e1b4b22; }
+    #drop-zone p { color: #64748b; font-size: .9rem; }
+    #drop-zone strong { color: #7c6aff; }
+
+    #file-input { display: none; }
+
+    #upload-progress {
+      display: none;
+      margin-top: 1rem;
+    }
+
+    progress {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      appearance: none;
+      background: #2d3148;
+    }
+
+    progress::-webkit-progress-bar   { background: #2d3148; border-radius: 3px; }
+    progress::-webkit-progress-value { background: #7c6aff; border-radius: 3px; }
+
+    #upload-msg { font-size: .85rem; color: #94a3b8; margin-top: .5rem; }
+
+    /* ── Video library ── */
+    #library-panel {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 12px;
+      padding: 2rem;
+      display: none;
+    }
+
+    #library-panel h2 {
+      margin-bottom: 1.25rem;
+      font-size: 1rem;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1rem;
+    }
+
+    .video-card {
+      background: #0f1117;
+      border: 1px solid #2d3148;
+      border-radius: 10px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+    }
+
+    .video-title { font-weight: 600; font-size: .95rem; word-break: break-all; }
+
+    .status-badge {
+      display: inline-block;
+      padding: .2rem .6rem;
+      border-radius: 100px;
+      font-size: .75rem;
+      font-weight: 600;
+      width: fit-content;
+    }
+
+    .status-pending    { background: #1e293b; color: #94a3b8; }
+    .status-processing { background: #1e3a5f; color: #60a5fa; }
+    .status-ready      { background: #14532d; color: #4ade80; }
+    .status-failed     { background: #450a0a; color: #f87171; }
+
+    .video-meta { font-size: .8rem; color: #64748b; }
+
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 10px;
+      padding: .75rem 1.25rem;
+      font-size: .875rem;
+      box-shadow: 0 8px 24px #00000055;
+      z-index: 999;
+      display: none;
+    }
+
+    .toast.error { border-color: #ef4444; color: #f87171; }
+    .toast.success { border-color: #22c55e; color: #4ade80; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📡 HLS Streaming</h1>
+  <div id="auth-status">Not logged in</div>
+</header>
+
+<main>
+  <!-- Auth -->
+  <div id="auth-panel">
+    <h2>Sign in or create an account</h2>
+    <div class="input-row">
+      <input id="username" type="text" placeholder="Username" />
+      <input id="password" type="password" placeholder="Password" />
+    </div>
+    <div style="display:flex;gap:.75rem;">
+      <button class="btn btn-primary" onclick="login()">Login</button>
+      <button class="btn btn-secondary" onclick="register()">Register</button>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div id="upload-panel">
+    <h2>Upload Video</h2>
+    <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <p>Drop a video file here or <strong>click to browse</strong></p>
+      <p style="margin-top:.5rem;font-size:.8rem;">MP4, MOV, AVI, MKV supported</p>
+    </div>
+    <input id="file-input" type="file" accept="video/*" onchange="uploadFile(this.files[0])" />
+    <div id="upload-progress">
+      <progress id="progress-bar" value="0" max="100"></progress>
+      <div id="upload-msg">Uploading…</div>
+    </div>
+  </div>
+
+  <!-- Library -->
+  <div id="library-panel">
+    <h2>
+      Video Library
+      <button class="btn btn-secondary btn-sm" onclick="loadVideos()">↻ Refresh</button>
+    </h2>
+    <div class="video-grid" id="video-grid">
+      <div style="color:#64748b;font-size:.9rem;">Loading…</div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let token = localStorage.getItem("stream_token") || null;
+
+  function showToast(msg, type = "success") {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className = `toast ${type}`;
+    t.style.display = "block";
+    setTimeout(() => t.style.display = "none", 3500);
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(path, { ...opts, headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    return res.json();
+  }
+
+  async function login() {
+    const u = document.getElementById("username").value;
+    const p = document.getElementById("password").value;
+    try {
+      const body = new URLSearchParams({ username: u, password: p });
+      const res = await fetch("/auth/login", { method: "POST", body });
+      if (!res.ok) throw new Error((await res.json()).detail);
+      const data = await res.json();
+      token = data.access_token;
+      localStorage.setItem("stream_token", token);
+      onLoggedIn(u);
+      showToast("Logged in!");
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function register() {
+    const u = document.getElementById("username").value;
+    const p = document.getElementById("password").value;
+    try {
+      const body = new URLSearchParams({ username: u, password: p });
+      const res = await fetch("/auth/register", { method: "POST", body });
+      if (!res.ok) throw new Error((await res.json()).detail);
+      showToast("Account created! Logging in…");
+      await login();
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  function onLoggedIn(username) {
+    document.getElementById("auth-panel").style.display = "none";
+    document.getElementById("upload-panel").style.display = "block";
+    document.getElementById("library-panel").style.display = "block";
+    document.getElementById("auth-status").innerHTML =
+      `Logged in as <span>${username || "user"}</span>`;
+    loadVideos();
+    setInterval(loadVideos, 8000);  // auto-refresh every 8s
+  }
+
+  async function loadVideos() {
+    try {
+      const videos = await apiFetch("/videos");
+      const grid = document.getElementById("video-grid");
+      if (!videos.length) {
+        grid.innerHTML = `<div style="color:#64748b;font-size:.9rem;">No videos yet. Upload one above!</div>`;
+        return;
+      }
+      grid.innerHTML = videos.map(v => `
+        <div class="video-card">
+          <div class="video-title">${v.title}</div>
+          <span class="status-badge status-${v.status}">${v.status}</span>
+          <div class="video-meta">${new Date(v.created_at).toLocaleString()}</div>
+          ${v.player_url
+            ? `<a href="${v.player_url}" target="_blank">
+                 <button class="btn btn-primary btn-sm" style="margin-top:.5rem;width:100%">
+                   ▶ Watch
+                 </button>
+               </a>`
+            : ""}
+        </div>
+      `).join("");
+    } catch (e) {
+      if (e.message.includes("401")) {
+        token = null;
+        localStorage.removeItem("stream_token");
+      }
+    }
+  }
+
+  async function uploadFile(file) {
+    if (!file) return;
+    const progressWrap = document.getElementById("upload-progress");
+    const bar = document.getElementById("progress-bar");
+    const msg = document.getElementById("upload-msg");
+    progressWrap.style.display = "block";
+    bar.value = 0;
+
+    const form = new FormData();
+    form.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/videos/upload");
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) {
+        bar.value = Math.round(e.loaded / e.total * 100);
+        msg.textContent = `Uploading… ${bar.value}%`;
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 202) {
+        msg.textContent = "Upload complete! FFmpeg is processing your video…";
+        bar.value = 100;
+        showToast("Video queued for processing!");
+        loadVideos();
+      } else {
+        msg.textContent = "Upload failed.";
+        showToast("Upload failed", "error");
+      }
+    };
+
+    xhr.onerror = () => showToast("Network error", "error");
+    xhr.send(form);
+  }
+
+  // Drag-and-drop
+  const zone = document.getElementById("drop-zone");
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag-over"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+  zone.addEventListener("drop", e => {
+    e.preventDefault();
+    zone.classList.remove("drag-over");
+    uploadFile(e.dataTransfer.files[0]);
+  });
+
+  // Resume session
+  if (token) onLoggedIn();
+</script>
+</body>
+</html>

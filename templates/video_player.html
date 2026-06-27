@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ video.title }} — HLS Player</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.7/hls.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0f;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    header {
+      width: 100%;
+      background: #1a1d27;
+      border-bottom: 1px solid #2d3148;
+      padding: .85rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    header a { color: #7c6aff; text-decoration: none; font-size: .9rem; }
+    header h1 { font-size: 1rem; color: #e2e8f0; font-weight: 600; }
+
+    .player-wrap {
+      width: 100%;
+      max-width: 960px;
+      padding: 2rem 1.5rem;
+    }
+
+    video {
+      width: 100%;
+      border-radius: 12px;
+      background: #000;
+      display: block;
+      box-shadow: 0 8px 40px #0007;
+    }
+
+    .meta {
+      margin-top: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: .5rem;
+    }
+
+    .meta h2 { font-size: 1.15rem; }
+
+    .quality-selector {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .85rem;
+      color: #94a3b8;
+    }
+
+    select {
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      color: #e2e8f0;
+      padding: .35rem .75rem;
+      border-radius: 6px;
+      font-size: .85rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .stats {
+      margin-top: 1rem;
+      background: #1a1d27;
+      border: 1px solid #2d3148;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: .5rem;
+      font-size: .8rem;
+      color: #64748b;
+    }
+
+    .stats span { color: #7c6aff; font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="/">← Dashboard</a>
+  <h1>{{ video.title }}</h1>
+</header>
+
+<div class="player-wrap">
+  <video id="video" controls autoplay playsinline></video>
+
+  <div class="meta">
+    <h2>{{ video.title }}</h2>
+    <div class="quality-selector">
+      Quality:
+      <select id="quality-select" onchange="setQuality(this.value)">
+        <option value="-1">Auto</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div>Resolution: <span id="stat-res">—</span></div>
+    <div>Bitrate: <span id="stat-bitrate">—</span></div>
+    <div>Buffer: <span id="stat-buffer">—</span></div>
+    <div>Dropped frames: <span id="stat-dropped">—</span></div>
+  </div>
+</div>
+
+<script>
+  const video  = document.getElementById("video");
+  const select = document.getElementById("quality-select");
+  const src    = "{{ playlist_url }}";
+
+  let hls;
+
+  if (Hls.isSupported()) {
+    hls = new Hls({
+      // Start at the lowest quality and ramp up (less initial buffering)
+      startLevel: -1,
+      capLevelToPlayerSize: true,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 60,
+    });
+
+    hls.loadSource(src);
+    hls.attachMedia(video);
+
+    // Populate quality selector once manifest is parsed
+    hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
+      data.levels.forEach((level, i) => {
+        const opt = document.createElement("option");
+        opt.value = i;
+        opt.textContent = `${level.height}p (${Math.round(level.bitrate / 1000)}k)`;
+        select.appendChild(opt);
+      });
+    });
+
+    // Live stats
+    setInterval(() => {
+      if (!hls) return;
+      const level = hls.levels[hls.currentLevel];
+      if (level) {
+        document.getElementById("stat-res").textContent =
+          `${level.width}×${level.height}`;
+        document.getElementById("stat-bitrate").textContent =
+          `${Math.round(level.bitrate / 1000)} kbps`;
+      }
+      const buf = video.buffered;
+      if (buf.length) {
+        const ahead = (buf.end(buf.length - 1) - video.currentTime).toFixed(1);
+        document.getElementById("stat-buffer").textContent = `${ahead}s`;
+      }
+      if (video.getVideoPlaybackQuality) {
+        const q = video.getVideoPlaybackQuality();
+        document.getElementById("stat-dropped").textContent = q.droppedVideoFrames;
+      }
+    }, 1000);
+
+  } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    // Safari — native HLS support
+    video.src = src;
+  } else {
+    video.insertAdjacentHTML("afterend",
+      `<p style="color:#f87171;margin-top:1rem;">
+        Your browser does not support HLS playback.
+      </p>`);
+  }
+
+  function setQuality(val) {
+    if (hls) hls.currentLevel = parseInt(val);
+  }
+</script>
+</body>
+</html>
